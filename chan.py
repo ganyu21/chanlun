@@ -1,7 +1,6 @@
 import pandas as pd
 from pyecharts.charts import Kline, Bar
 from pyecharts import options as opts
-from config import DATASET_PATH
 import os
 import webbrowser
 from datetime import datetime, timedelta
@@ -548,15 +547,14 @@ if __name__ == "__main__":
     {'datetime': '2023-08-10 10:00:00', 'code': 'sz.000001', 'open': 16.56, 'high': 17.37, 
     'low': 16.54, 'close': 17.1, 'volume': 209561419,}
     '''
-    symbol = "600285"
+    symbol = "000001"
     start_datetime = datetime(1999, 8, 31, 11, 15, 0)
     end_datetime = datetime(2099, 9, 5, 11, 15, 0)
     # start_datetime = datetime(2009, 7, 8, 0, 0, 0)
     # end_datetime = datetime(2012, 7, 20, 0, 0, 0)
 
-    # symbol = "v2305"
 
-    klines_h = pd.read_csv(DATASET_PATH + '/' + "stock/" + symbol + "_1d.csv")
+    klines_h = pd.read_csv("./" + symbol + "_1d.csv")
     klines_h['datetime'] = pd.to_datetime(klines_h['datetime'])
     # 使用布尔索引来筛选出'datetime'列小于今天的所有行
     klines_h = klines_h[(klines_h['datetime'] <= end_datetime) & (klines_h['datetime'] >= start_datetime)]
