@@ -522,9 +522,9 @@ class ChanLun:
         return None
 
     '''
-    笔三买判断
+    得到最近已经形成的指定层数的中枢
     hub_direct：中枢趋势方向
-    hub_layer：中枢的层数, 0代表忽略，1代表第一层中枢，2代表第二层中枢，以此类推
+    hub_layer：指定中枢层数, 0代表忽略，1代表第一层中枢，2代表第二层中枢，以此类推
     '''
 
     # direct is up or down
@@ -538,6 +538,17 @@ class ChanLun:
                 elif hub_tail['layer'] == hub_layer:
                     return hub_tail
         return None
+
+    '''
+    是否是第三买入或卖出点
+    '''
+
+    def is_third_point(self, hub_direct='up', hub_layer=0):
+        hub_tail = self.get_lastest_hub(hub_direct, hub_layer)
+        if not hub_tail:
+            return True
+        else:
+            return False
 
 
 if __name__ == "__main__":
@@ -565,11 +576,11 @@ if __name__ == "__main__":
 
     if len(klines_h) > 0:
         chan_h = ChanLun(klines_h)
+        # 得到最近已经形成的指定层数的中枢
         hub_tail = chan_h.get_lastest_hub(hub_direct='up', hub_layer=0)
         print('hub_tail', hub_tail)
         print('is_in_hub', chan_h.is_in_hub)
-        # if bthird_buy:
-        # print(chan_h.fbs)
-        # print(chan_h.hubs)
+        # 是否第三买入或卖出点
+        third_point = chan_h.is_third_point(hub_direct='up', hub_layer=0)
+        print('third_point', third_point)
         chan_h.draw(symbol)
-        # print(price)

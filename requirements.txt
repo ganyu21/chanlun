@@ -1,4 +1,2 @@
 pandas
 pyecharts
-os
-webbrowser
