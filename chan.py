@@ -12,7 +12,12 @@ from datetime import datetime, timedelta
 
 class ChanLun:
 
-    def __init__(self, klines):
+    def __init__(self, klines, symbol="mystock"):
+        klines = klines.sort_values('datetime')
+        klines.set_index('datetime', inplace=True)
+        klines = klines.reset_index()
+
+        self.symbol = symbol
         self.klines_orig_df = klines  # 原始K线, dataframe格式
         self.klines_orig = klines.to_dict(orient='records')  # 原始K线, list格式
         self.klines_merge = []  # 合并后的K线
@@ -20,7 +25,6 @@ class ChanLun:
         self.pens = []  # 笔列表
         self.hubs = []  # 中枢列表
         self.status = "未确定"
-        self.is_in_hub = False  # 当前是否在中枢内
         self.merge()
         self.check_merge()
         self.kline_fx()
@@ -92,7 +96,7 @@ class ChanLun:
             ktime.append(current_kline['datetime'])
             kvol.append(current_kline['volume'])
         kline = (
-            Kline().add_xaxis(ktime).add_yaxis(series_name=self.klines_merge[0]['code'], y_axis=kdata,
+            Kline().add_xaxis(ktime).add_yaxis(series_name=self.symbol, y_axis=kdata,
                                                markline_opts=opts.MarkLineOpts(label_opts=opts.LabelOpts(position="middle", color="blue", font_size=15),
                                                                                data=self.split_data_for_kline(),
                                                                                symbol=["circle", "none"], ),
@@ -102,7 +106,7 @@ class ChanLun:
                                                       splitarea_opts=opts.SplitAreaOpts(is_show=True, areastyle_opts=opts.AreaStyleOpts(opacity=1)),
                                                       ),
                              datazoom_opts=[opts.DataZoomOpts(range_start=0, range_end=100)],
-                             title_opts=opts.TitleOpts(title=self.klines_merge[0]['code']),
+                             title_opts=opts.TitleOpts(title=self.symbol),
                              )
             .set_series_opts(
                 markarea_opts=opts.MarkAreaOpts(is_silent=True, data=self.split_data_for_hub())
@@ -110,7 +114,7 @@ class ChanLun:
         )
 
         bar = (Bar().add_xaxis(ktime).add_yaxis("", kvol))
-        path = f"{os.path.expanduser('~/Downloads/')}/" + self.klines_merge[0]['code'] + "-" + freq + ".html"
+        path = f"{os.path.expanduser('~/Downloads/')}/" + self.symbol + "-" + freq + ".html"
         kline.render(path)
         webbrowser.open('file://' + path)
 
@@ -132,7 +136,7 @@ class ChanLun:
 
     def has_kine(self, begin, end):
         b_start = False
-        for i in range(self.klines_merge):
+        for i in range(len(self.klines_merge)):
             current_kline = self.klines_merge[i]
             if current_kline['datetime'] == begin:
                 b_start = True
@@ -160,13 +164,13 @@ class ChanLun:
 
     '''
     计算中枢
-    {'start_datetime': Timestamp('2024-02-23 00:00:00'), 'low_price': 9.35, 'high_price': 9.79, 'end_datetime': Timestamp('2024-04-12 00:00:00'), 'signal_price': 9.85, 'signal_datetime': Timestamp('2024-05-15 00:00:00'), 'mark': 'up', 'layer': 1}
+    {'start_datetime': Timestamp('2024-02-23 00:00:00'), 'low_price': 9.35, 'high_price': 9.79, 'end_datetime': Timestamp('2024-04-12 00:00:00'), 'signal_price': 9.85, 'signal_datetime': Timestamp('2024-05-15 00:00:00'), 'mark': 'up', 'layer': 1, 'finish':'yes'}
     '''
 
     def kline_hub(self):
         pen_len = len(self.pens)
         if pen_len < 7:
-            print("pen is less then 7，cant calculate hub")
+            # print("pen is less then 7，cant calculate hub")
             return
         i = 0
         up_layer = 0
@@ -174,26 +178,21 @@ class ChanLun:
         while i <= pen_len - 7:
             if self.pens[0 + i]['mark'] == 'up':
                 # 第0笔的起点价格低于第2笔的起点 且 第0笔的起点价格低于第4笔的起点
-                if self.pens[0 + i]['price'] < self.pens[2 + i]['price'] and self.pens[0 + i]['price'] < self.pens[4 + i]['price'] and self.pens[1 + i]['price'] >= \
-                        self.pens[4 + i]['price']:
+                if self.pens[0 + i]['price'] < self.pens[2 + i]['price'] and self.pens[0 + i]['price'] < self.pens[4 + i]['price'] and self.pens[1 + i]['price'] >= self.pens[4 + i]['price']:
                     hub = {}
                     hub['start_datetime'] = self.pens[1 + i]['fx']['k2']['datetime']
-                    hub['low_price'] = max(self.pens[2 + i]['price'], self.pens[4 + i]['price'])
-                    hub['high_price'] = min(self.pens[1 + i]['price'], self.pens[3 + i]['price'])
-                    # if hub['high_price'] < hub['low_price']:
-                    #     tmp = hub['high_price']
-                    #     hub['high_price'] = hub['low_price']
-                    #     hub['low_price'] = tmp
-
+                    hub['low_price'] = self.pens[4 + i]['price']
+                    hub['high_price'] = self.pens[1 + i]['price']
+                    hub['finish'] = 'no'
+                    hub['mark'] = 'up'
                     j = 0
                     while True:
-                        # while j <= fblen - 6 - i - 1:
-                        # 同方向跳出中枢
-                        if self.pens[6 + i + j]['price'] > hub['high_price'] and self.pens[5 + i + j]['price'] > hub['high_price']:
+                        # 同方向跳出构成中枢
+                        if self.pens[5 + i + j]['price'] > hub['high_price'] and self.pens[6 + i + j]['price'] > hub['high_price']:
                             hub['end_datetime'] = self.pens[4 + i + j]['fx']['k2']['datetime']
                             hub['signal_price'] = self.pens[6 + i + j]['price']
                             hub['signal_datetime'] = self.pens[6 + i + j]['fx']['k2']['datetime']
-                            hub['mark'] = 'up'
+                            hub['finish'] = 'yes'
                             if down_layer == 0:
                                 up_layer = up_layer + 1
                                 hub['layer'] = up_layer
@@ -201,52 +200,43 @@ class ChanLun:
                                 down_layer = 0
                                 up_layer = 1
                                 hub['layer'] = up_layer
-
                             self.hubs.append(hub)
                             i = 4 + i + j
                             break
                         # 反方向跳出中枢，无法构成中枢
-                        if self.pens[5 + i + j]['price'] < hub['low_price'] and self.pens[6 + i + j]['price'] < hub['low_price']:
-                            # hub['end_datetime'] = self.pens[4 + i + j]['fx']['k2']['datetime']
-                            # hub['signal_price'] = self.pens[6 + i + j]['price']
-                            # hub['signal_datetime'] = self.pens[6 + i + j]['fx']['k2']['datetime']
-                            # hub['mark'] = 'up-down'
-                            # self.hubs.append(hub)
-                            # i = 4 + i + j
+                        elif self.pens[5 + i + j]['price'] < hub['low_price'] and self.pens[6 + i + j]['price'] < hub['low_price']:
+                            i = 1 + i + j
+                            break
+                        # 在中枢内没到尽头，进行扩展中枢
+                        elif 6 + i + j + 1 < pen_len:
+                            j = j + 1
+                        # 到行情尽头
+                        else:
+                            hub['end_datetime'] = self.pens[6 + i + j]['fx']['k2']['datetime']
+                            # 未闭合的hub只能加一个
+                            if len(self.hubs) > 0 and self.hubs[-1]['finish'] != 'no':
+                                self.hubs.append(hub)
                             i = i + 1
                             break
-                        else:
-                            if 6 + i + j + 1 < pen_len:
-                                j = j + 1
-                                self.is_in_hub = True
-                            else:
-                                i = i + 1
-                                # self.is_in_hub = False
-                                break
-                    # i = i + 1
+                # 寻找中枢起点
                 else:
                     i = i + 1
-                    self.is_in_hub = False
             elif self.pens[0 + i]['mark'] == 'down':
-                if self.pens[0 + i]['price'] > self.pens[2 + i]['price'] and self.pens[0 + i]['price'] > self.pens[4 + i]['price'] and self.pens[1 + i]['price'] <= \
-                        self.pens[4 + i]['price']:
+                if self.pens[0 + i]['price'] > self.pens[2 + i]['price'] and self.pens[0 + i]['price'] > self.pens[4 + i]['price'] and self.pens[1 + i]['price'] <= self.pens[4 + i]['price']:
                     hub = {}
                     hub['start_datetime'] = self.pens[1 + i]['fx']['k2']['datetime']
-                    hub['low_price'] = max(self.pens[1 + i]['price'], self.pens[3 + i]['price'])
-                    hub['high_price'] = min(self.pens[2 + i]['price'], self.pens[4 + i]['price'])
-                    # if hub['high_price'] < hub['low_price']:
-                    #     tmp = hub['high_price']
-                    #     hub['high_price'] = hub['low_price']
-                    #     hub['low_price'] = tmp
+                    hub['low_price'] = self.pens[1 + i]['price']
+                    hub['high_price'] = self.pens[4 + i]['price']
+                    hub['finish'] = 'no'
+                    hub['mark'] = 'down'
                     j = 0
                     while True:
-                        # while j <= fblen - 6 - i - 1:
                         # 同方向跳出才能构成中枢
-                        if self.pens[6 + i + j]['price'] < hub['low_price'] and self.pens[5 + i + j]['price'] < hub['low_price']:
+                        if self.pens[5 + i + j]['price'] < hub['low_price'] and self.pens[6 + i + j]['price'] < hub['low_price']:
                             hub['end_datetime'] = self.pens[4 + i + j]['fx']['k2']['datetime']
                             hub['signal_price'] = self.pens[6 + i + j]['price']
                             hub['signal_datetime'] = self.pens[6 + i + j]['fx']['k2']['datetime']
-                            hub['mark'] = 'down'
+                            hub['finish'] = 'yes'
                             if up_layer == 0:
                                 down_layer = down_layer + 1
                                 hub['layer'] = down_layer
@@ -258,26 +248,20 @@ class ChanLun:
                             i = 4 + i + j
                             break
                         # 反方向跳出无法构成中枢
-                        if self.pens[5 + i + j]['price'] > hub['high_price'] and self.pens[6 + i + j]['price'] > hub['high_price']:
-                            # hub['end_datetime'] = self.pens[4 + i + j]['fx']['k2']['datetime']
-                            # hub['signal_price'] = self.pens[6 + i + j]['price']
-                            # hub['signal_datetime'] = self.pens[6 + i + j]['fx']['k2']['datetime']
-                            # hub['mark'] = 'down-up'
-                            # self.hubs.append(hub)
-                            # i = 4 + i + j
+                        elif self.pens[5 + i + j]['price'] > hub['high_price'] and self.pens[6 + i + j]['price'] > hub['high_price']:
+                            i = 1 + i + j
+                            break
+                        elif 6 + i + j + 1 < pen_len:
+                            j = j + 1
+                        else:
+                            hub['end_datetime'] = self.pens[6 + i + j]['fx']['k2']['datetime']
+                            # 未闭合的hub只能加一个
+                            if len(self.hubs)>0 and self.hubs[-1]['finish']!='no':
+                                self.hubs.append(hub)
                             i = i + 1
                             break
-                        else:
-                            if 6 + i + j + 1 < pen_len:
-                                j = j + 1
-                                self.is_in_hub = True
-                            else:
-                                i = i + 1
-                                # self.is_in_hub = False
-                                break
                 else:
                     i = i + 1
-                    self.is_in_hub = False
 
     '''
     笔划分，笔包括 开始分型（类型、最低和最高、开始分型的三个点，中间点的时间）、笔类型（up或down）、开始分型中间点的最值价格
@@ -292,10 +276,13 @@ class ChanLun:
     def kline_pen(self, bold=False):
         fxlen = len(self.fxs)
         if fxlen < 2:
-            print("fx is less then 2")
+            # print("fx is less then 2")
+            return
         fx_count = len(self.fxs)
         for i in range(fx_count):
             current_fx = self.fxs[i]
+            if i == fx_count - 1:
+                pass
             if len(self.pens) == 0:
                 current_pen = {}
                 current_pen['fx'] = current_fx
@@ -364,13 +351,17 @@ class ChanLun:
         if len(self.klines_merge) < 3:
             print("kline_merge is less")
             return
-
-        for i in range(len(self.klines_merge)):
+        i = 3
+        # for i in range(len(self.klines_merge)):
+        while i < len(self.klines_merge):
             if i < 2:
                 continue
+            if i == len(self.klines_merge) - 4:
+                pass
             first_k = self.klines_merge[i - 2]
             second_k = self.klines_merge[i - 1]
             third_k = self.klines_merge[i]
+
             # 顶分型
             if (second_k['high'] > first_k['high'] and second_k['high'] > third_k['high']) and \
                     (second_k['low'] > first_k['low'] and second_k['low'] > third_k['low']):
@@ -383,13 +374,15 @@ class ChanLun:
                 fx['k2'] = second_k
                 fx['k3'] = third_k
 
-                kdj = self.get_kdj(second_k['datetime'])
-                fx['K'] = kdj['K'].iloc[-1]
-                fx['D'] = kdj['D'].iloc[-1]
-                fx['J'] = kdj['J'].iloc[-1]
+                # kdj = self.get_kdj(second_k['datetime'])
+                # fx['K'] = kdj['K'].iloc[-1]
+                # fx['D'] = kdj['D'].iloc[-1]
+                # fx['J'] = kdj['J'].iloc[-1]
+                # self.get_macd()
                 self.fxs.append(fx)
+                i = i + 1
             # 底分型
-            if (second_k['low'] < first_k['low'] and second_k['low'] < third_k['low']) and \
+            elif (second_k['low'] < first_k['low'] and second_k['low'] < third_k['low']) and \
                     (second_k['high'] < first_k['high'] and second_k['high'] < third_k['high']):
                 fx = {}
                 fx['mark'] = 'l'
@@ -400,11 +393,22 @@ class ChanLun:
                 fx['k2'] = second_k
                 fx['k3'] = third_k
 
-                kdj = self.get_kdj(second_k['datetime'])
-                fx['K'] = kdj['K'].iloc[-1]
-                fx['D'] = kdj['D'].iloc[-1]
-                fx['J'] = kdj['J'].iloc[-1]
+                # kdj = self.get_kdj(second_k['datetime'])
+                # fx['K'] = kdj['K'].iloc[-1]
+                # fx['D'] = kdj['D'].iloc[-1]
+                # fx['J'] = kdj['J'].iloc[-1]
+                # self.get_macd()
                 self.fxs.append(fx)
+                i = i + 1
+            else:
+                i = i + 1
+
+    def get_macd(self, short_window=12, long_window=26, signal_window=9):
+        df=self.klines_orig_df
+        df['ema_short'] = df['close'].ewm(span=short_window, adjust=False).mean()
+        df['ema_long'] = df['close'].ewm(span=long_window, adjust=False).mean()
+        df['macd'] = df['ema_short'] - df['ema_long']
+        # df['signal'] = df['macd'].ewm(span=signal_window, adjust=False).mean()
 
     def get_kdj(self, datetime):
         df = self.klines_orig_df.copy()
@@ -505,7 +509,7 @@ class ChanLun:
     强底分型：第三根k线最高价大于第一根k线的最高价
     '''
 
-    def get_strong_bottom_fx(self):
+    def get_lastest_strong_bottom_fx(self):
         fx_tail = self.get_lastest_bottom_fx()
         if fx_tail:
             if fx_tail['k3']['high'] >= fx_tail['k1']['high']:
@@ -516,7 +520,7 @@ class ChanLun:
     强顶分型：第三根k线最底价小于第一根k线的最底价
     '''
 
-    def get_strong_top_fx(self):
+    def get_lastest_strong_top_fx(self):
         fx_tail = self.get_lastest_top_fx()
         if fx_tail:
             if fx_tail['k3']['low'] >= fx_tail['k1']['low']:
@@ -530,15 +534,18 @@ class ChanLun:
     '''
 
     # direct is up or down
-    def get_lastest_hub(self, hub_direct='up', hub_layers=None):
-        if hub_layers is None:
-            hub_layers = [1, 2, 3]
-        hub_count = len(self.hubs)
-        if hub_count > 0:
-            hub_tail = self.hubs[-1]
-            if hub_tail['mark'] == hub_direct:
-                if hub_tail['layer'] in hub_layers:
-                    return hub_tail
+    def get_lastest_finished_hub(self, hub_direct='up', hub_layers=[1, 2, 3]):
+        for hub in reversed(self.hubs):
+            if hub['mark']==hub_direct and hub['finish'] == 'yes' and hub['layer'] in hub_layers:
+                return hub
+        return None
+
+    def is_in_hub(self):
+        if len(self.hubs) == 0:
+            return None
+        hub = self.hubs[-1]
+        if hub['finish']=='no':
+            return hub
         return None
 
     '''
@@ -546,7 +553,7 @@ class ChanLun:
     '''
 
     def get_third_point_datetime(self, hub_direct='up', hub_layers=None):
-        hub_tail = self.get_lastest_hub(hub_direct, hub_layers)
+        hub_tail = self.get_lastest_finished_hub(hub_direct, hub_layers)
         if hub_tail:
             return hub_tail['signal_datetime']
         else:
@@ -561,29 +568,23 @@ if __name__ == "__main__":
     'low': 16.54, 'close': 17.1, 'volume': 209561419,}
     '''
     symbol = "000001"
-    # start_datetime = datetime(1999, 8, 31, 11, 15, 0)
-    # end_datetime = datetime(2099, 9, 5, 11, 15, 0)
-    start_datetime = datetime(2023, 11, 8, 0, 0, 0)
-    end_datetime = datetime(2024, 5, 27, 0, 0, 0)
-
-    # symbol = "v2305"
+    start_datetime = datetime(2020, 8, 1, 0, 0, 0)
+    end_datetime = datetime(2025, 12, 30, 0, 0, 0)
 
     klines = pd.read_csv('./' + "stock/" + symbol + "_1d.csv")
     klines['datetime'] = pd.to_datetime(klines['datetime'])
     # 使用布尔索引来筛选出'datetime'列小于今天的所有行
     klines = klines[(klines['datetime'] <= end_datetime) & (klines['datetime'] >= start_datetime)]
-    klines = klines.sort_values('datetime')
-    klines['code'] = symbol
-    klines.set_index('datetime', inplace=True)
-    klines = klines.reset_index()
+
 
     if len(klines) > 0:
-        chan = ChanLun(klines)
+        chan = ChanLun(klines, symbol)
         # 得到最近已经形成的指定层数的中枢
-        hub_tail = chan.get_lastest_hub(hub_direct='up', hub_layers=[1,2,3])
+        hub_tail = chan.get_lastest_finished_hub(hub_direct='up', hub_layers=[1, 2, 3])
         print('hub_tail', hub_tail)
-        print('is_in_hub', chan.is_in_hub)
         # 是否第三买入或卖出点
-        third_point = chan.get_third_point_datetime(hub_direct='up', hub_layers=[1,2,3])
+        third_point = chan.get_third_point_datetime(hub_direct='up', hub_layers=[1, 2, 3])
         print('third_point', third_point)
+
+        print("is_in_hub", chan.is_in_hub())
         chan.draw(symbol)
