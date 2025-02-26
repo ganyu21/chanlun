@@ -13,10 +13,6 @@ from datetime import datetime, timedelta
 class ChanLun:
 
     def __init__(self, klines, symbol="mystock"):
-        klines = klines.sort_values('datetime')
-        klines.set_index('datetime', inplace=True)
-        klines = klines.reset_index()
-
         self.symbol = symbol
         self.klines_orig_df = klines  # 原始K线, dataframe格式
         self.klines_orig = klines.to_dict(orient='records')  # 原始K线, list格式
